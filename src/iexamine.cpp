@@ -1809,7 +1809,7 @@ void iexamine::egg_sack_generic( player &p, const tripoint &examp,
         }
     }
     int roll = rng( 1, 5 );
-    bool drop_eggs = ( monster_count >= 1 ? true : false );
+    bool drop_eggs = monster_count >= 1;
     for( int i = 0; i < roll; i++ ) {
         handle_harvest( p, "spider_egg", drop_eggs );
     }
@@ -2122,7 +2122,7 @@ void iexamine::fertilize_plant( player &p, const tripoint &tile, const itype_id 
     }
 
     // TODO: item should probably clamp the value on its own
-    seed->set_birthday( std::max( calendar::time_of_cataclysm, seed->birthday() - fertilizerEpoch ) );
+    seed->set_birthday( seed->birthday() - fertilizerEpoch );
     // The plant furniture has the NOITEM token which prevents adding items on that square,
     // spawned items are moved to an adjacent field instead, but the fertilizer token
     // must be on the square of the plant, therefore this hack:
@@ -2600,6 +2600,10 @@ void iexamine::fireplace( player &p, const tripoint &examp )
     const bool has_bionic_firestarter = p.has_bionic( bionic_id( "bio_lighter" ) ) &&
                                         p.power_level >= bionic_id( "bio_lighter" )->power_activate;
 
+    auto firequenchers = p.items_with( []( const item & it ) {
+        return it.damage_melee( DT_BASH );
+    } );
+
     uilist selection_menu;
     selection_menu.text = _( "Select an action" );
     selection_menu.addentry( 0, true, 'e', _( "Examine" ) );
@@ -2609,10 +2613,10 @@ void iexamine::fireplace( player &p, const tripoint &examp )
         if( has_bionic_firestarter ) {
             selection_menu.addentry( 2, true, 'b', _( "Use a CBM to start a fire" ) );
         }
-    } else if( p.weapon.damage_melee( DT_BASH ) ) {
+    } else if( !firequenchers.empty() ) {
         selection_menu.addentry( 4, true, 's', _( "Put out fire" ) );
     } else {
-        selection_menu.addentry( 4, false, 's', _( "Put out fire - wield bashing item" ) );
+        selection_menu.addentry( 4, false, 's', _( "Put out fire (bashing item required)" ) );
     }
     if( furn_is_deployed ) {
         selection_menu.addentry( 3, true, 't', string_format( _( "Take down the %s" ),
@@ -3576,9 +3580,6 @@ void iexamine::reload_furniture( player &p, const tripoint &examp )
             return;
         }
     }
-    //~ %1$s - furniture, %2$d - number, %3$s items.
-    add_msg( _( "The %1$s contains %2$d %3$s." ), f.name(), amount_in_furn,
-             ammo->nname( amount_in_furn ) );
 
     const int max_amount_in_furn = ammo->charges_per_volume( f.max_volume );
     const int max_reload_amount = max_amount_in_furn - amount_in_furn;
@@ -3617,6 +3618,12 @@ void iexamine::reload_furniture( player &p, const tripoint &examp )
         item it( ammo, calendar::turn, amount );
         g->m.add_item( examp, it );
     }
+
+    const int amount_in_furn_after_placing = count_charges_in_list( ammo, items );
+    //~ %1$s - furniture, %2$d - number, %3$s items.
+    add_msg( _( "The %1$s contains %2$d %3$s." ), f.name(), amount_in_furn_after_placing,
+             ammo->nname( amount_in_furn_after_placing ) );
+
     add_msg( _( "You reload the %s." ), g->m.furnname( examp ) );
     p.moves -= to_moves<int>( 5_seconds );
 }
@@ -4508,7 +4515,7 @@ void iexamine::autodoc( player &p, const tripoint &examp )
             int broken_limbs_count = 0;
             for( int i = 0; i < num_hp_parts; i++ ) {
                 const bool broken = patient.get_hp( static_cast<hp_part>( i ) ) <= 0;
-                body_part part = patient.hp_to_bp( static_cast<hp_part>( i ) );
+                body_part part = player::hp_to_bp( static_cast<hp_part>( i ) );
                 effect &existing_effect = patient.get_effect( effect_mending, part );
                 // Skip part if not broken or already healed 50%
                 if( !broken || ( !existing_effect.is_null() &&
@@ -4919,8 +4926,8 @@ static void smoker_load_food( player &p, const tripoint &examp,
     for( const item &m : moved ) {
         g->m.add_item( examp, m );
         p.mod_moves( -p.item_handling_cost( m ) );
-        add_msg( m_info, _( "You carefully place %s %s in the rack." ), amount, m.nname( m.typeId(),
-                 amount ) );
+        add_msg( m_info, _( "You carefully place %s %s in the rack." ), amount,
+                 item::nname( m.typeId(), amount ) );
     }
     p.invalidate_crafting_inventory();
 }
@@ -5027,8 +5034,7 @@ static void mill_load_food( player &p, const tripoint &examp,
         g->m.add_item( examp, m );
         p.mod_moves( -p.item_handling_cost( m ) );
         add_msg( m_info, pgettext( "item amount and name", "You carefully place %s %s in the mill." ),
-                 amount, m.nname( m.typeId(),
-                                  amount ) );
+                 amount, item::nname( m.typeId(), amount ) );
     }
     p.invalidate_crafting_inventory();
 }
@@ -5164,7 +5170,7 @@ void iexamine::quern_examine( player &p, const tripoint &examp )
                             "\n ";
                         continue;
                     }
-                    pop << "-> " << it.nname( it.typeId(), it.charges );
+                    pop << "-> " << item::nname( it.typeId(), it.charges );
                     pop << " (" << std::to_string( it.charges ) << ") \n ";
                 }
             }
@@ -5368,7 +5374,7 @@ void iexamine::smoker_options( player &p, const tripoint &examp )
                             "\n ";
                         continue;
                     }
-                    pop << "-> " << it.nname( it.typeId(), it.charges );
+                    pop << "-> " << item::nname( it.typeId(), it.charges );
                     pop << " (" << std::to_string( it.charges ) << ") \n ";
                 }
             }
@@ -5453,6 +5459,7 @@ void iexamine::workbench_internal( player &p, const tripoint &examp,
 {
     std::vector<item_location> crafts;
     std::string name;
+    bool is_undeployable = false;
 
     bool items_at_loc = false;
 
@@ -5467,6 +5474,9 @@ void iexamine::workbench_internal( player &p, const tripoint &examp,
         }
     } else {
         name = g->m.furn( examp ).obj().name();
+        if( item::type_is_defined( g->m.furn( examp ).obj().deployed_item ) ) {
+            is_undeployable = true;
+        }
 
         auto items_at_furn = g->m.i_at( examp );
         items_at_loc = !items_at_furn.empty();
@@ -5485,7 +5495,8 @@ void iexamine::workbench_internal( player &p, const tripoint &examp,
         repeat_craft,
         start_long_craft,
         work_on_craft,
-        get_items
+        get_items,
+        undeploy
     };
 
     amenu.text = string_format( pgettext( "furniture", "What to do at the %s?" ), name );
@@ -5495,6 +5506,9 @@ void iexamine::workbench_internal( player &p, const tripoint &examp,
     amenu.addentry( work_on_craft,    !crafts.empty(), '4', _( "Work on craft" ) );
     if( !part ) {
         amenu.addentry( get_items,    items_at_loc,    'g', _( "Get items" ) );
+    }
+    if( is_undeployable ) {
+        amenu.addentry( undeploy,     true,            't', _( "Take down the %s" ), name );
     }
 
     amenu.query();
@@ -5565,6 +5579,10 @@ void iexamine::workbench_internal( player &p, const tripoint &examp,
         }
         case get_items: {
             Pickup::pick_up( examp, 0 );
+            break;
+        }
+        case undeploy: {
+            deployed_furniture( p, examp );
             break;
         }
     }

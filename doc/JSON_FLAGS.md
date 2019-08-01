@@ -1079,6 +1079,7 @@ These branches are also the valid entries for the categories of `dreams` in `dre
 - ```CLASSIC``` Location is allowed when classic zombies are enabled.
 - ```FUNGAL``` Location is related to fungi. Used to classify location.
 - ```TRIFFID``` Location is related to triffids. Used to classify location.
+- ```LAKE``` Location is is placed on a lake and will be ignored for placement if the overmap doesn't contain any lake terrain.
 - ```UNIQUE``` Location is unique and will only occur once per overmap. `occurrences` is overridden to define a percent chance (e.g. `"occurrences" : [75, 100]` is 75%)
 
 ### Overmap terrains
@@ -1322,6 +1323,7 @@ Those flags are added by the game code to specific items (that specific welder, 
 - ```TOOL_NONE``` Can be removed/installed without any tools
 - ```TOOL_SCREWDRIVER``` Attached with screws, can be removed/installed with a screwdriver
 - ```TOOL_WRENCH``` Attached with bolts, can be removed/installed with a wrench
+- ```TOWEL``` Can be used to dry yourself up.
 - ```TRACKED``` Contributes to steering effectiveness but doesn't count as a steering axle for install difficulty and still contributes to drag for the center of steering calculation.
 - ```TRACK``` Allows the vehicle installed on, to be marked and tracked on map.
 - ```TURRET_MOUNT``` Parts with this flag are suitable for installing turrets.

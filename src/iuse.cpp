@@ -2125,7 +2125,7 @@ int iuse::radio_on( player *p, item *it, bool t, const tripoint &pos )
             } );
 
             std::vector<std::string> segments = foldstring( message, RADIO_PER_TURN );
-            int index = calendar::turn % segments.size();
+            int index = to_turn<int>( calendar::turn ) % segments.size();
             std::stringstream messtream;
             messtream << string_format( _( "radio: %s" ), segments[index] );
             message = messtream.str();
@@ -5228,6 +5228,11 @@ int iuse::hotplate( player *p, item *it, bool, const tripoint & )
 
 int iuse::towel( player *p, item *it, bool t, const tripoint & )
 {
+    return towel_common( p, it, t );
+}
+
+int iuse::towel_common( player *p, item *it, bool t )
+{
     if( t ) {
         // Continuous usage, do nothing as not initiated by the player, this is for
         // wet towels only as they are active items.
@@ -5238,9 +5243,10 @@ int iuse::towel( player *p, item *it, bool t, const tripoint & )
     bool glow = p->has_effect( effect_glowing );
     int mult = slime + boom + glow; // cleaning off more than one at once makes it take longer
     bool towelUsed = false;
+    const std::string name = it ? it->tname() : _( "towel" );
 
     // can't use an already wet towel!
-    if( it->has_flag( "WET" ) ) {
+    if( it && it->has_flag( "WET" ) ) {
         p->add_msg_if_player( m_info, _( "That %s is too wet to soak up any more liquid!" ),
                               it->tname() );
         // clean off the messes first, more important
@@ -5249,10 +5255,10 @@ int iuse::towel( player *p, item *it, bool t, const tripoint & )
         p->remove_effect( effect_boomered );
         p->remove_effect( effect_glowing );
         p->add_msg_if_player( _( "You use the %s to clean yourself off, saturating it with slime!" ),
-                              it->tname() );
+                              name );
 
         towelUsed = true;
-        if( it->typeId() == "towel" ) {
+        if( it && it->typeId() == "towel" ) {
             it->convert( "towel_soiled" );
         }
 
@@ -5261,14 +5267,16 @@ int iuse::towel( player *p, item *it, bool t, const tripoint & )
         p->rem_morale( MORALE_WET );
         p->body_wetness.fill( 0 );
         p->add_msg_if_player( _( "You use the %s to dry off, saturating it with water!" ),
-                              it->tname() );
+                              name );
 
         towelUsed = true;
-        it->item_counter = to_turns<int>( 30_minutes );
+        if( it ) {
+            it->item_counter = to_turns<int>( 30_minutes );
+        }
 
         // default message
     } else {
-        p->add_msg_if_player( _( "You are already dry, the %s does nothing." ), it->tname() );
+        p->add_msg_if_player( _( "You are already dry, the %s does nothing." ), name );
     }
 
     // towel was used
@@ -5277,16 +5285,18 @@ int iuse::towel( player *p, item *it, bool t, const tripoint & )
             mult = 1;
         }
         p->moves -= 50 * mult;
-        // change "towel" to a "towel_wet" (different flavor text/color)
-        if( it->typeId() == "towel" ) {
-            it->convert( "towel_wet" );
-        }
+        if( it ) {
+            // change "towel" to a "towel_wet" (different flavor text/color)
+            if( it->typeId() == "towel" ) {
+                it->convert( "towel_wet" );
+            }
 
-        // WET, active items have their timer decremented every turn
-        it->item_tags.insert( "WET" );
-        it->active = true;
+            // WET, active items have their timer decremented every turn
+            it->item_tags.insert( "WET" );
+            it->active = true;
+        }
     }
-    return it->type->charges_to_use();
+    return it ? it->type->charges_to_use() : 0;
 }
 
 int iuse::unfold_generic( player *p, item *it, bool, const tripoint & )
@@ -6594,9 +6604,9 @@ static std::string effects_description_for_creature( Creature *const creature, s
         ef_con( std::string status, std::string pose ) :
             status( status ), pose( pose ), intensity_lower_limit( 0 ) {}
         ef_con( std::string status, int intensity_lower_limit ) :
-            status( status ), pose(), intensity_lower_limit( intensity_lower_limit ) {}
+            status( status ), intensity_lower_limit( intensity_lower_limit ) {}
         ef_con( std::string status ) :
-            status( status ), pose(), intensity_lower_limit( 0 ) {}
+            status( status ), intensity_lower_limit( 0 ) {}
     };
     static const std::unordered_map<efftype_id, ef_con> vec_effect_status = {
         { effect_onfire, ef_con( _( " is on <color_red>fire</color>. " ) ) },
@@ -7047,11 +7057,11 @@ static extended_photo_def photo_def_for_camera_point( const tripoint &aim_point,
 
     if( g->get_levz() >= 0 && need_store_weather ) {
         photo_text += "\n\n";
-        if( calendar::turn.is_sunrise_now() ) {
+        if( is_sunrise_now( calendar::turn ) ) {
             photo_text += _( "It is <color_yellow>sunrise</color>. " );
-        } else if( calendar::turn.is_sunset_now() ) {
+        } else if( is_sunset_now( calendar::turn ) ) {
             photo_text += _( "It is <color_light_red>sunset</color>. " );
-        } else if( calendar::turn.is_night() ) {
+        } else if( is_night( calendar::turn ) ) {
             photo_text += _( "It is <color_dark_gray>night</color>. " );
         } else {
             photo_text += _( "It is day. " );
@@ -8035,16 +8045,7 @@ int iuse::autoclave( player *p, item *it, bool t, const tripoint &pos )
         if( !it->units_sufficient( *p ) ) {
             add_msg( m_bad, _( "The autoclave ran out of battery and stopped before completing its cycle." ) );
             it->active = false;
-            item *clean_cbm = nullptr;
-            for( item &bio : it->contents ) {
-                if( bio.is_bionic() ) {
-                    clean_cbm = &bio;
-                }
-            }
-            if( clean_cbm ) {
-                g->m.add_item( pos, *clean_cbm );
-                it->remove_item( *clean_cbm );
-            }
+            it->erase_var( "CYCLETIME" );
             return 0;
         }
 
@@ -8053,17 +8054,11 @@ int iuse::autoclave( player *p, item *it, bool t, const tripoint &pos )
         if( Cycle_time <= 0 ) {
             it->active = false;
             it->erase_var( "CYCLETIME" );
-            item *clean_cbm = nullptr;
             for( item &bio : it->contents ) {
                 if( bio.is_bionic() ) {
                     bio.unset_flag( "NO_STERILE" );
                     bio.set_var( "sterile", 1 ); // sterile for 1s if not (packed);
-                    clean_cbm = &bio;
                 }
-            }
-            if( clean_cbm ) {
-                g->m.add_item( pos, *clean_cbm );
-                it->remove_item( *clean_cbm );
             }
         } else {
             it->set_var( "CYCLETIME", Cycle_time );
@@ -8074,16 +8069,45 @@ int iuse::autoclave( player *p, item *it, bool t, const tripoint &pos )
             return 0;
         }
 
-        auto reqs = *requirement_id( "autoclave_item" );
+        bool empty = true;
+        item *clean_cbm = nullptr;
+        for( item &bio : it->contents ) {
+            if( bio.is_bionic() ) {
+                clean_cbm = &bio;
+            }
+        }
+        if( clean_cbm ) {
+            empty = false;
+            if( query_yn( _( "Autoclave already contains a CBM.  Do you want to remove it?" ) ) ) {
+                g->m.add_item( pos, *clean_cbm );
+                it->remove_item( *clean_cbm );
+                if( !query_yn( _( "Do you want to use the autoclave?" ) ) ) {
+                    return 0;
+                }
+                empty = true;
+            }
+        }
 
-        item_location to_sterile = game_menus::inv::sterilize_cbm( *p );
-
-        if( !to_sterile ) {
+        //Using power_draw seem to consume random amount of battery so +100 to be safe
+        static const int power_need = ( ( it->type->tool->power_draw / 1000 ) * to_seconds<int>
+                                        ( 90_minutes ) ) / 1000 + 100;
+        if( power_need > it->ammo_remaining() ) {
+            popup( string_format(
+                       _( "The autoclave doesn't have enough battery for one cycle.  You need at least %s charges." ),
+                       power_need ) );
             return 0;
         }
 
-        if( query_yn( _( "Start the autoclave?" ) ) ) {
+        item_location to_sterile;
+        if( empty ) {
+            to_sterile = game_menus::inv::sterilize_cbm( *p );
+            if( !to_sterile ) {
+                return 0;
+            }
+        }
 
+        if( query_yn( _( "Start the autoclave?" ) ) ) {
+            auto reqs = *requirement_id( "autoclave_item" );
             for( const auto &e : reqs.get_components() ) {
                 p->consume_items( e, 1, is_crafting_component );
             }
@@ -8091,10 +8115,12 @@ int iuse::autoclave( player *p, item *it, bool t, const tripoint &pos )
                 p->consume_tools( e );
             }
             p->invalidate_crafting_inventory();
-            const item *cbm = to_sterile.get_item();
 
-            it->put_in( *cbm );
-            to_sterile.remove_item();
+            if( empty ) {
+                const item *cbm = to_sterile.get_item();
+                it->put_in( *cbm );
+                to_sterile.remove_item();
+            }
 
             it->activate();
             it->set_var( "CYCLETIME", to_seconds<int>( 90_minutes ) ); // one cycle

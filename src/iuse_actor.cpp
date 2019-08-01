@@ -1022,6 +1022,49 @@ iuse_actor *deploy_furn_actor::clone() const
     return new deploy_furn_actor( *this );
 }
 
+void deploy_furn_actor::info( const item &, std::vector<iteminfo> &dump ) const
+{
+    std::vector<std::string> can_function_as;
+    const furn_t &the_furn = furn_type.obj();
+    const std::string furn_name = the_furn.name();
+
+    if( the_furn.workbench.has_value() ) {
+        can_function_as.emplace_back( _( "a <info>crafting station</info>" ) );
+    }
+    if( the_furn.has_flag( "BUTCHER_EQ" ) ) {
+        can_function_as.emplace_back(
+            _( "a place to hang <info>corpses for butchering</info>" ) );
+    }
+    if( the_furn.has_flag( "FLAT_SURF" ) ) {
+        can_function_as.emplace_back(
+            _( "a flat surface to <info>butcher</info> onto or <info>eat meals</info> from" ) );
+    }
+    if( the_furn.has_flag( "CAN_SIT" ) ) {
+        can_function_as.emplace_back( _( "a place to <info>sit</info>" ) );
+    }
+    if( the_furn.has_flag( "HIDE_PLACE" ) ) {
+        can_function_as.emplace_back( _( "a place to <info>hide</info>" ) );
+    }
+    if( the_furn.has_flag( "FIRE_CONTAINER" ) ) {
+        can_function_as.emplace_back( _( "a safe place to <info>contain a fire</info>" ) );
+    }
+    if( the_furn.crafting_pseudo_item == "char_smoker" ) {
+        can_function_as.emplace_back( _( "a place to <info>smoke or dry food</info> for preservation" ) );
+    }
+
+    if( can_function_as.empty() ) {
+        dump.emplace_back( "DESCRIPTION",
+                           string_format( _( "Can be <info>activated</info> to deploy as furniture (<stat>%s</stat>)." ),
+                                          furn_name ) );
+    } else {
+        std::string furn_usages = enumerate_as_string( can_function_as, enumeration_conjunction::or_ );
+        dump.emplace_back( "DESCRIPTION",
+                           string_format(
+                               _( "Can be <info>activated</info> to deploy as furniture (<stat>%s</stat>), which can then be used as %s." ),
+                               furn_name, furn_usages ) );
+    }
+}
+
 void deploy_furn_actor::load( JsonObject &obj )
 {
     furn_type = furn_str_id( obj.get_string( "furn_type" ) );
@@ -1173,12 +1216,9 @@ bool firestarter_actor::prep_firestarter_use( const player &p, tripoint &pos )
             has_unactivated_brazier = true;
         }
     }
-    if( has_unactivated_brazier &&
-        !query_yn(
-            _( "There's a brazier there but you haven't set it up to contain the fire. Continue?" ) ) ) {
-        return false;
-    }
-    return true;
+    return !has_unactivated_brazier ||
+           query_yn(
+               _( "There's a brazier there but you haven't set it up to contain the fire. Continue?" ) );
 }
 
 void firestarter_actor::resolve_firestarter_use( player &p, const tripoint &pos )
@@ -2669,18 +2709,16 @@ int bandolier_actor::use( player &p, item &it, bool, const tripoint & ) const
 
 units::volume bandolier_actor::max_stored_volume() const
 {
-    // This is relevant only for bandoliers with the non-rigid flag.  There are
-    // no such items in the base game at time of writing, but I created some to
-    // test this and it does seem to work as expected.
+    // This is relevant only for bandoliers with the non-rigid flag
 
     // Find all valid ammo
     auto ammo_types = Item_factory::find( [&]( const itype & t ) {
         return is_valid_ammo_type( t );
     } );
-    // Figure out which has the greateset volume and calculate on that basis
+    // Figure out which has the greatest volume and calculate on that basis
     units::volume max_ammo_volume{};
     for( const auto *ammo_type : ammo_types ) {
-        max_ammo_volume = std::max( max_ammo_volume, ammo_type->volume );
+        max_ammo_volume = std::max( max_ammo_volume, ammo_type->volume / ammo_type->stack_size );
     }
     return max_ammo_volume * capacity;
 }
@@ -3931,7 +3969,11 @@ iuse_actor *saw_barrel_actor::clone() const
 
 int install_bionic_actor::use( player &p, item &it, bool, const tripoint & ) const
 {
-    return p.install_bionics( *it.type, p, false ) ? it.type->charges_to_use() : 0;
+    if( p.can_install_bionics( *it.type, p, false ) ) {
+        return p.install_bionics( *it.type, p, false ) ? it.type->charges_to_use() : 0;
+    } else {
+        return 0;
+    }
 }
 
 ret_val<bool> install_bionic_actor::can_use( const player &p, const item &it, bool,

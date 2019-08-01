@@ -1428,6 +1428,9 @@ void activity_handlers::fill_liquid_do_turn( player_activity *act, player *p )
                     if( !liquid.charges ) {
                         act_ref.set_to_null();
                     } else {
+                        if( act_ref.str_values.empty() ) {
+                            act_ref.str_values.push_back( std::string() );
+                        }
                         act_ref.str_values.at( 0 ) = serialize( liquid );
                     }
                 } else {
@@ -1935,7 +1938,7 @@ void activity_handlers::start_fire_finish( player_activity *act, player *p )
     p->consume_charges( it, it.type->charges_to_use() );
     p->practice( skill_survival, act->index, 5 );
 
-    actor->resolve_firestarter_use( *p, act->placement );
+    firestarter_actor::resolve_firestarter_use( *p, act->placement );
     act->set_to_null();
 }
 
@@ -2403,7 +2406,7 @@ void activity_handlers::repair_item_finish( player_activity *act, player *p )
 
         // TODO: Allow setting this in the actor
         // TODO: Don't use charges_to_use: welder has 50 charges per use, soldering iron has 1
-        if( !used_tool->ammo_sufficient() ) {
+        if( !used_tool->units_sufficient( *p ) ) {
             p->add_msg_if_player( _( "Your %s ran out of charges" ), used_tool->tname() );
             act->set_to_null();
             return;
@@ -3115,24 +3118,34 @@ void activity_handlers::try_sleep_finish( player_activity *act, player *p )
 
 void activity_handlers::operation_finish( player_activity *act, player *p )
 {
-    if( act->values[1] > 0 ) {
-        add_msg( m_good,
-                 _( "The Autodoc retuns to its resting position after succesfully performing the operation." ) );
-        const std::list<tripoint> autodocs = g->m.find_furnitures_in_radius( p->pos(), 1,
-                                             furn_str_id( "f_autodoc" ) );
-        sounds::sound( autodocs.front(), 10, sounds::sound_t::music,
-                       _( "a short upbeat jingle: \"Operation successful\"" ), true,
-                       "Autodoc",
-                       "success" );
+    if( act->str_values[6] == "true" ) {
+        if( act->values[1] > 0 ) {
+            add_msg( m_good,
+                     _( "The Autodoc returns to its resting position after successfully performing the operation." ) );
+            const std::list<tripoint> autodocs = g->m.find_furnitures_in_radius( p->pos(), 1,
+                                                 furn_str_id( "f_autodoc" ) );
+            sounds::sound( autodocs.front(), 10, sounds::sound_t::music,
+                           _( "a short upbeat jingle: \"Operation successful\"" ), true,
+                           "Autodoc",
+                           "success" );
+        } else {
+            add_msg( m_bad,
+                     _( "The Autodoc jerks back to its resting position after failing the operation." ) );
+            const std::list<tripoint> autodocs = g->m.find_furnitures_in_radius( p->pos(), 1,
+                                                 furn_str_id( "f_autodoc" ) );
+            sounds::sound( autodocs.front(), 10, sounds::sound_t::music,
+                           _( "a sad beeping noise: \"Operation failed\"" ), true,
+                           "Autodoc",
+                           "failure" );
+        }
     } else {
-        add_msg( m_bad,
-                 _( "The Autodoc jerks back to its resting position after failing the operation." ) );
-        const std::list<tripoint> autodocs = g->m.find_furnitures_in_radius( p->pos(), 1,
-                                             furn_str_id( "f_autodoc" ) );
-        sounds::sound( autodocs.front(), 10, sounds::sound_t::music,
-                       _( "a sad beeping noise: \"Operation failed\"" ), true,
-                       "Autodoc",
-                       "failure" );
+        if( act->values[1] > 0 ) {
+            add_msg( m_good,
+                     _( "The operation is a success." ) );
+        } else {
+            add_msg( m_bad,
+                     _( "The operation is a failure." ) );
+        }
     }
     act->set_to_null();
 }
