@@ -2293,5 +2293,18 @@
       { "point": [ 0, 0, -1 ], "overmap": "pawn_pf_under_north" },
       { "point": [ 0, 0, 1 ], "overmap": "pawn_pf_roof_north" }
     ]
-  }
+  },
+    {
+    "type": "city_building",
+    "id": "chemplant",
+    "locations": [ "land" ],
+    "overmaps": [
+      { "point": [ 0, 0, 0 ], "overmap": "chem_plant_1_3_north" },
+      { "point": [ 1, 0, 0 ], "overmap": "chem_plant_1_2_north" },
+      { "point": [ 2, 0, 0 ], "overmap": "chem_plant_1_1_north" },
+      { "point": [ 0, 1, 0 ], "overmap": "chem_plant_1_6_north" },
+      { "point": [ 1, 1, 0 ], "overmap": "chem_plant_1_5_north" },
+      { "point": [ 2, 1, 0 ], "overmap": "chem_plant_1_4_north" }
+	]
+   }
 ]
